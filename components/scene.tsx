@@ -7,14 +7,13 @@ import { DSVParsedArray } from "d3";
 import * as THREE from "three";
 import * as d3 from "d3";
 
+import NetworkGeometry from "@/components/network-geometry";
+import BvhBuilder from "@/components/bvh-builder";
+
 type SceneProps = {
     dataURL: string;
     children?: ReactNode
 }
-
-type Node = { id: string, group: string, x: number, y: number };
-type Edge = { source: string, target: string };
-type Network = { nodes: Node[], edges: Edge[] };
 
 /**
  * Parses a DSV Array of Edges into a Network of separate node-edge declarations.
@@ -52,67 +51,34 @@ function parseNetwork(data?: DSVParsedArray<object>): Network {
     return { nodes, edges };
 }
 
-function NetworkGeometry({ network }: Network) {
-    const { nodes, edges } = network;
+export default function Scene({ dataURL, children }: SceneProps) {
+    const [data, setData] = useState<DSVParsedArray<object>>(null);
 
-    const { pointPositions, linePositions } = useMemo(() => {
-        if (!nodes || !edges)
-            return { pointPositions: new Float32Array<ArrayBuffer>(), linePositions: new Float32Array<ArrayBuffer>() };
+    /* Fetching .CSV data */
+    useEffect(() => {
+        let cancelled = false;
 
-        /* buffers of coordinate positions that will be read by the GPU */
-        const pointPositions: Float32Array<ArrayBuffer> = new Float32Array(nodes.length * 3) ?? [];
-        const linePositions: Float32Array<ArrayBuffer> = new Float32Array(edges.length * 6) ?? [];
+        d3.csv(dataURL, d3.autoType)
+            .then(res => {
+                if (!cancelled) setData(res)
+            })
+            .catch(console.error);
 
-        /* allows for indexing later FIXME: just do this when you parse the network? */
-        const nodeLookup: Map<string, Node> = new Map(nodes.map((n: Node) => [n.id, n]));
+        return () => { cancelled = true; };
+    }, [dataURL]);
 
-        /* flatten [x,y,z] coordinates of each node into a sequential buffer */
-        nodes.forEach((node, i) => {
-            pointPositions[i * 3] = node.x;
-            pointPositions[i * 3 + 1] = node.y;
-            pointPositions[i * 3 + 2] = 0;
-        });
-
-        /* flatten [x,y,z] coordinates of each edge direction into a sequential buffer */
-        edges.forEach((edge, i) => {
-            const source = nodeLookup.get(edge.source)!;
-            const target = nodeLookup.get(edge.target)!;
-            linePositions.set([source.x, source.y, 0, target.x, target.y, 0,], i * 6);
-        });
-
-        return { pointPositions, linePositions };
-    }, [network]);
-
-    /* Render the network as a group of points & line segments */
-    return (
-        <group>
-            <lineSegments>
-                <bufferGeometry>
-                    <bufferAttribute attach="attributes-position" args={[linePositions, 3]} />
-                </bufferGeometry>
-                <lineBasicMaterial color="#64748b" transparent={true} opacity={0.5} />
-            </lineSegments>
-            <points>
-                <bufferGeometry>
-                    <bufferAttribute attach="attributes-position" args={[pointPositions, 3]} />
-                </bufferGeometry>
-                <pointsMaterial color="#38bdf8" size={4} sizeAttenuation={false} />
-            </points>
-        </group>
-    );
-}
-
-function NetworkView({ network }: Network) {
-    const { nodes } = network
+    /* Parse d3 array into separate nodes & edges */
+    const network = useMemo(() => (parseNetwork(data)), [data]);
 
     /* on each network state change, updates the bounds of the viewport */
     const bounds = useMemo(() => {
-        if (nodes.length === 0)
+        if (network?.nodes.length === 0)
             return { cX: 0, cY: 0, width: 10, height: 10 };
+
+        const { nodes } = network;
 
         const xs = nodes.map((n) => n.x);
         const ys = nodes.map((n) => n.y);
-
         const minX = Math.min(...xs);
         const maxX = Math.max(...xs);
         const minY = Math.min(...ys);
@@ -140,43 +106,21 @@ function NetworkView({ network }: Network) {
     }
 
     return (
-        <div className="w-full h-full">
-            <Canvas orthographic camera={{ position: [bounds.cX, bounds.cY, 100], near: 0.1, far: 1000, }}
+        <div className="w-screen h-screen relative">
+            <Canvas id="canvas-layer" className="absolute inset-0 z-[0]"
+                    orthographic camera={{ position: [bounds.cX, bounds.cY, 100], near: 0.1, far: 1000, }}
                     onCreated={({ camera, size }) => onCanvas(camera, size)}
             >
                 <color attach="background" args={["#0f172a"]} />
                 <NetworkGeometry network={network} />
+                <BvhBuilder nodes={network.nodes} />
                 <OrbitControls target={[bounds.cX, bounds.cY, 0]}
                                enableRotate={false} enablePan enableZoom screenSpacePanning
                 />
             </Canvas>
-        </div>
-    );
-}
-
-export default function Scene({ dataURL, children }: SceneProps) {
-    const [data, setData] = useState<DSVParsedArray<object>>(null);
-
-    /* Fetching .CSV data */
-    useEffect(() => {
-        let cancelled = false;
-
-        d3.csv(dataURL, d3.autoType)
-            .then(res => {
-                if (!cancelled) setData(res)
-            })
-            .catch(console.error);
-
-        return () => { cancelled = true; };
-    }, [dataURL]);
-
-    /* Parse d3 array into separate nodes & edges */
-    const network = useMemo(() => (parseNetwork(data)), [data]);
-
-    return (
-        <div style={{ width: "100vw", height: "100vh" }}>
-            <NetworkView key={data ? "loaded" : "empty"} network={network} />
-            {children}
+            <div id="ui-layer" className="w-screen h-screen absolute inset-0 z-50 pointer-events-none">
+                {children}
+            </div>
         </div>
     );
 }
