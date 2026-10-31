@@ -1,6 +1,9 @@
-import { useMemo } from "react"
+import {useEffect, useMemo, useRef} from "react"
+import { Instances, Instance } from "@react-three/drei"
 import { Vector2 } from "three"
 import * as THREE from "three"
+
+import { BVH } from "@/library/bvh/BVH";
 
 type BoundingVolume = {
     extent: Vector2,
@@ -11,48 +14,35 @@ type BvhBuilderProps = {
     nodes: Node[]
 }
 
-/**
- * Iterate over every node in the network, finding the [min, max] bounds of the entire scene
- * time complexity - O(v)
- * @param nodes
- */
-const sceneBounds = (nodes: Node[]): { min: Vector2, max: Vector2 } => {
-    const max: Vector2 = new Vector2(-Infinity, -Infinity);
-    const min: Vector2 = new Vector2(+Infinity, +Infinity);
+const BvhBuilder = ({ nodes = [] }: BvhBuilderProps) => {
+    /* Re-Instantiate BVH when nodes change FIXME - WARNING: all BVH state will be wiped whenever deps change */
+    const bvh = useMemo(() => new BVH(nodes), [nodes]);
 
-    nodes.forEach(({ x, y}) => {
-        max.max({ x, y } as Vector2);
-        min.min({ x, y } as Vector2)
-    });
+    console.log("root:", bvh.Flattened()[0]);
+    console.log(bvh.Flattened());
 
-    return { min, max };
-}
-
-
-const BvhBuilder = ({ nodes }: BvhBuilderProps) => {
-
-
-    const bvh: { size: Vector2, center: Vector2 } = useMemo(() => {
-        if (!nodes || !nodes.length)
-            return { size: new Vector2(0,0), center: new Vector2(0, 0) };
-
-        const scene = sceneBounds(nodes);
-        let w = Math.abs(scene.max.x - scene.min.x);
-        let h = Math.abs(scene.max.y - scene.min.y);
-        let center = new Vector2().addVectors(scene.max, scene.min).multiplyScalar(0.5);
-
-        return ({
-            size: new Vector2(w, h),
-            center: center
-        })
-    }, [nodes])
-
+    if (!bvh || !bvh.Flattened().length) return null;
     return (
-        <mesh position={[...bvh.center, 0]}>
-            <planeGeometry args={[...bvh.size]}/>
-            <meshBasicMaterial color={"#ff0000"} transparent={true} opacity={0.25} side={2}/> {/* side={2} renders double-sided */}
-        </mesh>
-    )
+        <Instances>
+            <planeGeometry />
+            <meshBasicMaterial color={"#F00"} transparent={true} opacity={0.25} side={2} />
+            {bvh.Flattened().map((bv, i) => (
+                <Instance key={i} position={[...bv.bounds.Center, 0]} scale={[...bv.bounds.Size, 1]} />
+            ))}
+        </Instances>
+    );
+
+    // TODO: groups may be useful when traversal is implemented, ie. an individual hit square should glow a different color
+    // return (
+    //     <group>
+    //         {bvh.Flattened().map((bv, i) => (
+    //             <mesh key={i} position={[bv.bounds.Center.x, bv.bounds.Center.y, 0]}>
+    //                 <planeGeometry args={[...bv.bounds.Size]}/>
+    //                 <meshBasicMaterial color={"#ff0000"} transparent={true} opacity={0.25} side={2}/>
+    //             </mesh>
+    //         ))}
+    //     </group>
+    // )
 }
 
 export default BvhBuilder;
