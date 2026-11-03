@@ -52,9 +52,9 @@ const NetworkControls = () => {
                     <Select id='strategy-select' label="Select Split Strategy"
                             options={strategies} value={strategy} onChange={setStrategy} />
                     <Slider id='depth-slider' label="Maximum Depth"
-                            bounds={{min: 0, max: 30}} value={maxDepth} onChange={setMaxDepth} />
+                            bounds={{min: 0, max: 10}} value={maxDepth} onChange={setMaxDepth} />
                     <Slider id='leaf-slider' label="Maximum Leaf Size"
-                            bounds={{min: 1, max: 10}} value={maxLeaf} onChange={setMaxLeaf} />
+                            bounds={{min: 1, max: 20}} value={maxLeaf} onChange={setMaxLeaf} />
                 </ControlsGroup>
                 <ControlsGroup title="Performance">
                     <Button text="Start Profiling"/>
