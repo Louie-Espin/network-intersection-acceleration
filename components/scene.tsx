@@ -9,9 +9,9 @@ import * as d3 from "d3";
 
 import NetworkGeometry from "@/components/network-geometry";
 import BvhBuilder from "@/components/bvh-builder";
+import { useBVHContext } from "@/components/context/bvh-context";
 
 type SceneProps = {
-    dataURL: string;
     children?: ReactNode
 }
 
@@ -51,21 +51,22 @@ function parseNetwork(data?: DSVParsedArray<object>): Network {
     return { nodes, edges };
 }
 
-export default function Scene({ dataURL, children }: SceneProps) {
+export default function Scene({ children }: SceneProps) {
+    const { url, maxDepth } = useBVHContext();
     const [data, setData] = useState<DSVParsedArray<object>>(null);
 
     /* Fetching .CSV data */
     useEffect(() => {
         let cancelled = false;
 
-        d3.csv(dataURL, d3.autoType)
+        d3.csv(url, d3.autoType)
             .then(res => {
                 if (!cancelled) setData(res)
             })
             .catch(console.error);
 
         return () => { cancelled = true; };
-    }, [dataURL]);
+    }, [url]);
 
     /* Parse d3 array into separate nodes & edges */
     const network = useMemo(() => (parseNetwork(data)), [data]);
@@ -107,13 +108,13 @@ export default function Scene({ dataURL, children }: SceneProps) {
 
     return (
         <div className="w-screen h-screen relative">
-            <Canvas id="canvas-layer" className="absolute inset-0 z-[0]"
+            <Canvas id="canvas-layer" className="absolute inset-0 z-[0] cursor-crosshair"
                     orthographic camera={{ position: [bounds.cX, bounds.cY, 100], near: 0.1, far: 1000, }}
                     onCreated={({ camera, size }) => onCanvas(camera, size)}
             >
                 <color attach="background" args={["#0f172a"]} />
                 <NetworkGeometry network={network} />
-                <BvhBuilder nodes={network.nodes} />
+                <BvhBuilder nodes={network.nodes} depth={maxDepth}/>
                 <OrbitControls target={[bounds.cX, bounds.cY, 0]}
                                enableRotate={false} enablePan enableZoom screenSpacePanning
                 />

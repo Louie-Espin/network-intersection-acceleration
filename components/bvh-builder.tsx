@@ -1,48 +1,53 @@
-import {useEffect, useMemo, useRef} from "react"
+import { useMemo } from "react"
 import { Instances, Instance } from "@react-three/drei"
-import { Vector2 } from "three"
 import * as THREE from "three"
 
 import { BVH } from "@/library/bvh/BVH";
 
-type BoundingVolume = {
-    extent: Vector2,
-    center: Vector2,
-}
-
 type BvhBuilderProps = {
-    nodes: Node[]
+    nodes: Node[],
+    depth: number
 }
 
-const BvhBuilder = ({ nodes = [] }: BvhBuilderProps) => {
+const BvhBuilder = ({nodes = [], depth}: BvhBuilderProps) => {
     /* Re-Instantiate BVH when nodes change FIXME - WARNING: all BVH state will be wiped whenever deps change */
-    const bvh = useMemo(() => new BVH(nodes), [nodes]);
+    const bvh = useMemo(() => new BVH(nodes, depth), [nodes, depth]);
 
-    console.log("root:", bvh.Flattened()[0]);
-    console.log(bvh.Flattened());
+    console.log("root:", bvh.Compact[0]);
+    console.log('BVH (compact):', bvh.Compact);
 
-    if (!bvh || !bvh.Flattened().length) return null;
+    if (!bvh || !bvh.Compact.length) return null;
     return (
-        <Instances>
-            <planeGeometry />
-            <meshBasicMaterial color={"#F00"} transparent={true} opacity={0.25} side={2} />
-            {bvh.Flattened().map((bv, i) => (
-                <Instance key={i} position={[...bv.bounds.Center, 0]} scale={[...bv.bounds.Size, 1]} />
-            ))}
-        </Instances>
+        <group>
+            {/* MAX-DEPTH BOUNDS */}
+            <Instances>
+                <planeGeometry/>
+                <meshBasicMaterial transparent={true} opacity={.5} side={THREE.DoubleSide} depthWrite={false}/>
+                {bvh.Compact.map((bv, i) => (
+                    (bv.depth == depth) && (
+                        <Instance key={i}
+                                  color={new THREE.Color().setHSL((bv.depth / 6.0 % 1.0), 1.0, 0.5)}
+                                  position={[...bv.bounds.Center, 0]} scale={[...bv.bounds.Size, 1]}
+                        />
+                    )
+                ))}
+            </Instances>
+            {/* EARLIER BOUNDS - wireframe */}
+            <Instances>
+                <planeGeometry/>
+                <meshBasicMaterial transparent={true} wireframe={true} opacity={0.5} side={THREE.DoubleSide}
+                                   depthWrite={false}/>
+                {bvh.Compact.map((bv, i) => (
+                    (bv.depth != depth) && (
+                        <Instance key={i}
+                                  color={new THREE.Color().setHSL((bv.depth / 6.0 % 1.0), 1.0, 0.5)}
+                                  position={[...bv.bounds.Center, 0]} scale={[...bv.bounds.Size, 1]}
+                        />
+                    )
+                ))}
+            </Instances>
+        </group>
     );
-
-    // TODO: groups may be useful when traversal is implemented, ie. an individual hit square should glow a different color
-    // return (
-    //     <group>
-    //         {bvh.Flattened().map((bv, i) => (
-    //             <mesh key={i} position={[bv.bounds.Center.x, bv.bounds.Center.y, 0]}>
-    //                 <planeGeometry args={[...bv.bounds.Size]}/>
-    //                 <meshBasicMaterial color={"#ff0000"} transparent={true} opacity={0.25} side={2}/>
-    //             </mesh>
-    //         ))}
-    //     </group>
-    // )
 }
 
 export default BvhBuilder;
